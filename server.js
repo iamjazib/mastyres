@@ -296,14 +296,18 @@ const server = http.createServer(async (req, res) => {
         process.env.SMTP_PASS = pass;
         process.env.ADMIN_EMAIL = recipient;
 
-        // Persist to .env
-        const envContent = `# MAS Tyres Configuration
+        // Persist to .env if filesystem is writable
+        try {
+          const envContent = `# MAS Tyres Configuration
 ADMIN_EMAIL=${recipient}
 SMTP_SERVICE=gmail
 SMTP_USER=${user}
 SMTP_PASS=${pass}
 `;
-        fs.writeFileSync(path.join(PUBLIC_DIR, '.env'), envContent, 'utf8');
+          fs.writeFileSync(path.join(PUBLIC_DIR, '.env'), envContent, 'utf8');
+        } catch (fsErr) {
+          console.log('[ENV PERSISTENCE] Cloud environment (read-only filesystem) detected. Credentials stored in session memory.');
+        }
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({
