@@ -20,27 +20,31 @@ const MIME_TYPES = {
   '.ico': 'image/x-icon'
 };
 
-function getMailerTransport() {
-  if (process.env.SMTP_USER && process.env.SMTP_PASS) {
-    if (process.env.SMTP_SERVICE) {
-      return nodemailer.createTransport({
-        service: process.env.SMTP_SERVICE,
-        auth: {
-          user: process.env.SMTP_USER,
-          pass: process.env.SMTP_PASS
-        }
-      });
+function getMailerTransport(reqData) {
+  const user = ((reqData && reqData.smtp_user) || process.env.SMTP_USER || '').trim();
+  const rawPass = (reqData && reqData.smtp_pass) || process.env.SMTP_PASS || '';
+  const pass = rawPass.replace(/\s+/g, '');
+
+  if (user && pass) {
+    if (process.env.SMTP_SERVICE || (!process.env.SMTP_HOST && user.includes('gmail'))) {
+      return {
+        transporter: nodemailer.createTransport({
+          service: 'gmail',
+          auth: { user, pass }
+        }),
+        user
+      };
     }
 
-    return nodemailer.createTransport({
-      host: process.env.SMTP_HOST || 'smtp.gmail.com',
-      port: parseInt(process.env.SMTP_PORT || '465', 10),
-      secure: process.env.SMTP_SECURE === 'true' || process.env.SMTP_PORT === '465',
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS
-      }
-    });
+    return {
+      transporter: nodemailer.createTransport({
+        host: process.env.SMTP_HOST || 'smtp.gmail.com',
+        port: parseInt(process.env.SMTP_PORT || '465', 10),
+        secure: process.env.SMTP_SECURE === 'true' || process.env.SMTP_PORT === '465',
+        auth: { user, pass }
+      }),
+      user
+    };
   }
   return null;
 }
@@ -353,16 +357,16 @@ SMTP_PASS=${pass}
           }
         }
 
-        const transporter = getMailerTransport();
+        const mailer = getMailerTransport(data);
 
-        if (transporter) {
+        if (mailer) {
           // Send custom red HTML table email with PDF attachment via SMTP
           console.log(`[SMTP] Sending custom red branded table email with PDF attachment to ${recipientEmail}...`);
           const subject = `MAS Tyres Invoice - Reg: ${vehicleReg} (${data.grand_total || '£0.00'})`;
           const htmlContent = buildRedBrandedHtmlEmail(data, !!data.pdf_base64);
 
           const mailOptions = {
-            from: `"MAS Tyres" <${process.env.SMTP_USER}>`,
+            from: `"MAS Tyres" <${mailer.user}>`,
             to: recipientEmail,
             subject: subject,
             text: `Hello,\n\nPlease find attached the official PDF invoice for vehicle registration ${vehicleReg}.\n\nInvoice Summary:\n- Customer: ${data.customer_name}\n- Date: ${data.invoice_date}\n- Mileage: ${data.mileage}\n- Total Due: ${data.grand_total}\n\nThank you for choosing MAS Tyres.`,
@@ -379,7 +383,7 @@ SMTP_PASS=${pass}
             ];
           }
 
-          await transporter.sendMail(mailOptions);
+          await mailer.transporter.sendMail(mailOptions);
 
           console.log(`[SMTP SUCCESS] Delivered to ${recipientEmail} with PDF attachment!`);
           res.writeHead(200, { 'Content-Type': 'application/json' });

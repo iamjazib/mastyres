@@ -2,27 +2,31 @@ const nodemailer = require('nodemailer');
 
 const DEFAULT_ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'jazib7563@gmail.com';
 
-function getMailerTransport() {
-  if (process.env.SMTP_USER && process.env.SMTP_PASS) {
-    if (process.env.SMTP_SERVICE) {
-      return nodemailer.createTransport({
-        service: process.env.SMTP_SERVICE,
-        auth: {
-          user: process.env.SMTP_USER,
-          pass: process.env.SMTP_PASS
-        }
-      });
+function getMailerTransport(reqData) {
+  const user = ((reqData && reqData.smtp_user) || process.env.SMTP_USER || '').trim();
+  const rawPass = (reqData && reqData.smtp_pass) || process.env.SMTP_PASS || '';
+  const pass = rawPass.replace(/\s+/g, '');
+
+  if (user && pass) {
+    if (process.env.SMTP_SERVICE || (!process.env.SMTP_HOST && user.includes('gmail'))) {
+      return {
+        transporter: nodemailer.createTransport({
+          service: 'gmail',
+          auth: { user, pass }
+        }),
+        user
+      };
     }
 
-    return nodemailer.createTransport({
-      host: process.env.SMTP_HOST || 'smtp.gmail.com',
-      port: parseInt(process.env.SMTP_PORT || '465', 10),
-      secure: process.env.SMTP_SECURE === 'true' || process.env.SMTP_PORT === '465',
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS
-      }
-    });
+    return {
+      transporter: nodemailer.createTransport({
+        host: process.env.SMTP_HOST || 'smtp.gmail.com',
+        port: parseInt(process.env.SMTP_PORT || '465', 10),
+        secure: process.env.SMTP_SECURE === 'true' || process.env.SMTP_PORT === '465',
+        auth: { user, pass }
+      }),
+      user
+    };
   }
   return null;
 }
@@ -99,37 +103,41 @@ function buildRedBrandedHtmlEmail(data, hasAttachment) {
           
           ${attachmentNotice}
 
-          <!-- Vehicle & Customer Detail Cards -->
+          <!-- Vehicle & Customer Details in Two Clean Cards -->
           <table style="width: 100%; border-collapse: collapse; margin-bottom: 24px;">
             <tr>
-              <!-- Vehicle Details Card with Red Accent -->
               <td style="width: 50%; vertical-align: top; padding-right: 8px;">
-                <div style="background-color: #fef2f2; border: 1.5px solid #fecaca; border-radius: 12px; padding: 14px;">
-                  <span style="font-size: 10px; font-weight: 800; color: #dc2626; text-transform: uppercase; letter-spacing: 0.5px;">JOB &amp; VEHICLE DETAILS</span>
-                  
-                  <div style="margin-top: 8px; background-color: #fef08a; border: 1.5px solid #eab308; border-radius: 6px; padding: 4px 10px; display: inline-block; font-family: monospace; font-size: 16px; font-weight: 900; color: #0f172a; letter-spacing: 1px;">
-                    ${vehicleReg}
-                  </div>
-
-                  <div style="margin-top: 8px; font-size: 12px; color: #475569; line-height: 1.4;">
-                    <div>Date: <strong style="color: #0f172a;">${data.invoice_date || 'N/A'}</strong></div>
-                    <div>Mileage: <strong style="color: #0f172a;">${data.mileage || 'N/A'}</strong></div>
-                  </div>
+                <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px;">
+                  <span style="font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.8px; color: #64748b; display: block; margin-bottom: 10px;">Vehicle & Job Details</span>
+                  <table style="width: 100%; font-size: 13px; line-height: 1.6;">
+                    <tr>
+                      <td style="color: #64748b; width: 85px;">Registration:</td>
+                      <td><span style="display: inline-block; background-color: #0f172a; color: #fbbf24; font-family: monospace; font-weight: 800; padding: 2px 8px; border-radius: 4px; font-size: 12px;">${vehicleReg}</span></td>
+                    </tr>
+                    <tr>
+                      <td style="color: #64748b;">Date:</td>
+                      <td style="font-weight: 600; color: #0f172a;">${data.invoice_date || 'N/A'}</td>
+                    </tr>
+                    <tr>
+                      <td style="color: #64748b;">Mileage:</td>
+                      <td style="font-weight: 600; color: #0f172a;">${data.mileage || 'N/A'}</td>
+                    </tr>
+                  </table>
                 </div>
               </td>
-
-              <!-- Customer Details Card -->
               <td style="width: 50%; vertical-align: top; padding-left: 8px;">
-                <div style="background-color: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 12px; padding: 14px;">
-                  <span style="font-size: 10px; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">CUSTOMER DETAILS</span>
-                  
-                  <div style="margin-top: 8px; font-size: 15px; font-weight: 700; color: #0f172a;">
-                    ${data.customer_name || 'N/A'}
-                  </div>
-
-                  <div style="margin-top: 8px; font-size: 12px; color: #64748b; line-height: 1.4;">
-                    Contact: <strong style="color: #0f172a;">${data.customer_contact || 'N/A'}</strong>
-                  </div>
+                <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px;">
+                  <span style="font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.8px; color: #64748b; display: block; margin-bottom: 10px;">Customer Details</span>
+                  <table style="width: 100%; font-size: 13px; line-height: 1.6;">
+                    <tr>
+                      <td style="color: #64748b; width: 65px;">Name:</td>
+                      <td style="font-weight: 700; color: #0f172a;">${data.customer_name || 'N/A'}</td>
+                    </tr>
+                    <tr>
+                      <td style="color: #64748b;">Contact:</td>
+                      <td style="color: #334155;">${data.customer_contact || 'N/A'}</td>
+                    </tr>
+                  </table>
                 </div>
               </td>
             </tr>
@@ -203,17 +211,25 @@ async function sendViaZeroConfigRelay(data, recipientEmail) {
     'Total Due': data.grand_total || '£0.00'
   };
 
-  const response = await fetch(`https://formsubmit.co/ajax/${recipientEmail}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json; charset=utf-8',
-      'Origin': 'https://mas-tyres.vercel.app',
-      'Referer': 'https://mas-tyres.vercel.app/'
-    },
-    body: Buffer.from(JSON.stringify(payload), 'utf8')
-  });
+  try {
+    const response = await fetch(`https://formsubmit.co/ajax/${encodeURIComponent(recipientEmail)}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
 
-  return await response.json();
+    const text = await response.text();
+    try {
+      return JSON.parse(text);
+    } catch (e) {
+      return null;
+    }
+  } catch (err) {
+    return null;
+  }
 }
 
 module.exports = async function handler(req, res) {
@@ -236,14 +252,14 @@ module.exports = async function handler(req, res) {
       ? data.admin_email.trim() 
       : (process.env.ADMIN_EMAIL || DEFAULT_ADMIN_EMAIL);
 
-    const transporter = getMailerTransport();
+    const mailer = getMailerTransport(data);
 
-    if (transporter) {
+    if (mailer) {
       const subject = `MAS Tyres Invoice - Reg: ${vehicleReg} (${data.grand_total || '£0.00'})`;
       const htmlContent = buildRedBrandedHtmlEmail(data, !!data.pdf_base64);
 
       const mailOptions = {
-        from: `"MAS Tyres" <${process.env.SMTP_USER}>`,
+        from: `"MAS Tyres" <${mailer.user}>`,
         to: recipientEmail,
         subject: subject,
         text: `Hello,\n\nPlease find attached the official PDF invoice for vehicle registration ${vehicleReg}.\n\nInvoice Summary:\n- Customer: ${data.customer_name}\n- Date: ${data.invoice_date}\n- Total Due: ${data.grand_total}\n\nThank you for choosing MAS Tyres.`,
@@ -260,34 +276,37 @@ module.exports = async function handler(req, res) {
         ];
       }
 
-      await transporter.sendMail(mailOptions);
+      await mailer.transporter.sendMail(mailOptions);
 
       return res.status(200).json({
         success: true,
         isSmtp: true,
         message: `Invoice & attached PDF sent successfully to ${recipientEmail}!`
       });
-    } else {
-      const relayResult = await sendViaZeroConfigRelay(data, recipientEmail);
-      if (relayResult.success === 'true' || relayResult.success === true) {
-        return res.status(200).json({
-          success: true,
-          isSmtp: false,
-          message: `Invoice table sent to ${recipientEmail}!`
-        });
-      } else {
-        return res.status(200).json({
-          success: true,
-          isSmtp: false,
-          message: `Invoice dispatched to ${recipientEmail}!`
-        });
-      }
     }
+
+    // If SMTP is not yet configured, try basic relay
+    const relayResult = await sendViaZeroConfigRelay(data, recipientEmail);
+    if (relayResult && (relayResult.success === 'true' || relayResult.success === true)) {
+      return res.status(200).json({
+        success: true,
+        isSmtp: false,
+        message: `Invoice summary sent to ${recipientEmail}! (Note: Connect Gmail to attach PDF files)`
+      });
+    }
+
+    // If relay was blocked or not configured, return clear actionable guidance
+    return res.status(400).json({
+      success: false,
+      needsSmtp: true,
+      message: 'Gmail App Password required to send invoice & PDF. Click "To: ' + recipientEmail + ' ✎ edit" at the top to enter your 16-character Google App Password.'
+    });
+
   } catch (err) {
     console.error('[VERCEL API ERROR]', err);
     return res.status(500).json({
       success: false,
-      message: `Could not send invoice: ${err.message}`
+      message: `Failed to deliver email: ${err.message}`
     });
   }
 };

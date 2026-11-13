@@ -3,6 +3,7 @@
   "rewrites": [
     { "source": "/send-mail.php", "destination": "/api/send-mail" },
     { "source": "/api/send-mail", "destination": "/api/send-mail" },
+    { "source": "/api/save-smtp", "destination": "/api/save-smtp" },
     { "source": "/api/smtp-status", "destination": "/api/smtp-status" }
   ]
 }

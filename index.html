@@ -278,9 +278,9 @@
                 customerContact: '',
                 adminEmail: localStorage.getItem('mas_admin_email') || 'jazib7563@gmail.com',
                 tempEmail: localStorage.getItem('mas_admin_email') || 'jazib7563@gmail.com',
-                smtpUser: 'jazib7563@gmail.com',
-                smtpPass: '',
-                smtpStatus: { connected: false },
+                smtpUser: localStorage.getItem('mas_smtp_user') || 'jazib7563@gmail.com',
+                smtpPass: localStorage.getItem('mas_smtp_pass') || '',
+                smtpStatus: { connected: !!localStorage.getItem('mas_smtp_pass') },
                 showSettings: false,
                 isSending: false,
                 isVerifyingSmtp: false,
@@ -290,13 +290,18 @@
                     message: ''
                 },
                 init() {
+                    if (this.smtpPass) {
+                        this.smtpStatus.connected = true;
+                    }
                     this.checkSmtpStatus();
                 },
                 async checkSmtpStatus() {
                     try {
                         const res = await fetch('/api/smtp-status');
                         const data = await res.json();
-                        this.smtpStatus.connected = !!data.connected;
+                        if (data.connected) {
+                            this.smtpStatus.connected = true;
+                        }
                         if (data.user) this.smtpUser = data.user;
                         if (data.adminEmail) this.adminEmail = data.adminEmail;
                         this.tempEmail = this.adminEmail;
@@ -321,10 +326,14 @@
                                 admin_email: this.adminEmail
                             })
                         });
-                        const result = await res.json();
+                        const text = await res.text();
+                        let result;
+                        try { result = JSON.parse(text); } catch (e) { result = { success: false, message: 'Server verification error' }; }
+                        
                         if (result.success) {
                             this.smtpStatus.connected = true;
-                            this.smtpPass = '';
+                            localStorage.setItem('mas_smtp_user', this.smtpUser.trim());
+                            localStorage.setItem('mas_smtp_pass', this.smtpPass.trim());
                             this.showSettings = false;
                             this.notification = {
                                 show: true,
@@ -404,6 +413,8 @@
                         customer_name: this.customerName || 'N/A',
                         customer_contact: this.customerContact || 'N/A',
                         admin_email: this.adminEmail,
+                        smtp_user: this.smtpUser,
+                        smtp_pass: this.smtpPass,
                         items: this.items,
                         items_summary: this.items.map(i => `${i.qty || '1x'} | ${i.description || 'Service'} | Unit: £${(parseFloat(i.price)||0).toFixed(2)} | Total: £${this.lineTotal(i).toFixed(2)}`).join('\n'),
                         subtotal: `£${this.subtotal.toFixed(2)}`,
@@ -414,27 +425,55 @@
                     };
 
                     try {
-                        const response = await fetch("send-mail.php", {
-                            method: "POST",
-                            headers: { 
-                                "Content-Type": "application/json; charset=utf-8" 
-                            },
-                            body: JSON.stringify(payload)
-                        });
+                        let response;
+                        try {
+                            response = await fetch("/api/send-mail", {
+                                method: "POST",
+                                headers: { 
+                                    "Content-Type": "application/json; charset=utf-8" 
+                                },
+                                body: JSON.stringify(payload)
+                            });
+                            if (!response.ok && response.status === 404) {
+                                response = await fetch("send-mail.php", {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json; charset=utf-8" },
+                                    body: JSON.stringify(payload)
+                                });
+                            }
+                        } catch (fetchErr) {
+                            response = await fetch("send-mail.php", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json; charset=utf-8" },
+                                body: JSON.stringify(payload)
+                            });
+                        }
 
-                        const result = await response.json();
+                        let result;
+                        try {
+                            const text = await response.text();
+                            result = JSON.parse(text);
+                        } catch (parseErr) {
+                            result = {
+                                success: false,
+                                message: "Server returned unexpected response. Please connect Gmail SMTP to send invoices."
+                            };
+                        }
 
                         if (result.success) {
                             this.notification = {
                                 show: true,
-                                type: result.needsActivation ? 'info' : 'success',
+                                type: result.isSmtp ? 'success' : 'info',
                                 message: result.message
                             };
                         } else {
+                            if (result.needsSmtp) {
+                                this.showSettings = true;
+                            }
                             this.notification = {
                                 show: true,
                                 type: 'error',
-                                message: 'Failed to send invoice: ' + (result.message || 'Server error.')
+                                message: result.message || 'Failed to send invoice.'
                             };
                         }
                     } catch (err) {
