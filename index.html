@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MAS Tyres - Invoice & Job Sheet Generator</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Alpine.js for reactive form management -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <!-- jsPDF & AutoTable for fast, reliable vector PDF downloads -->
+    <script src="libs/jspdf.umd.min.js"></script>
+    <script src="libs/jspdf.plugin.autotable.min.js"></script>
+    <script>
+        if (!window.jspdf) {
+            document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"><\/script>');
+            document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"><\/script>');
+        }
+    </script>
+    <style>
+        [x-cloak] { display: none !important; }
+        @media print {
+            body { background: #ffffff !important; padding: 0 !important; }
+            .print-hidden, #app-controls, #settings-modal { display: none !important; }
+            #invoice-card {
+                box-shadow: none !important;
+                border: none !important;
+                margin: 0 !important;
+                max-width: 100% !important;
+                border-radius: 0 !important;
+            }
+            input {
+                border-color: transparent !important;
+                background-color: transparent !important;
+                padding-left: 0 !important;
+                padding-right: 0 !important;
+            }
+        }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800 font-sans antialiased min-h-screen p-4 md:p-8">
+
+    <div id="invoice-card" class="max-w-4xl mx-auto bg-white shadow-xl rounded-2xl overflow-hidden border border-slate-200" x-data="invoiceApp()">
+        
+        <!-- Form Controls Header (Clean alignment & spacing) -->
+        <div id="app-controls" class="bg-slate-900 text-white p-5 md:p-6 flex flex-col md:flex-row justify-between md:items-center gap-4 print-hidden">
+            <div class="space-y-1.5">
+                <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+                    <h1 class="text-xl font-black tracking-tight whitespace-nowrap">
+                        <span class="text-red-500 uppercase tracking-wide">MAS Tyres</span>
+                        <span class="text-slate-500 font-normal mx-1">—</span>
+                        <span class="text-white">Invoice Generator</span>
+                    </h1>
+                    <button @click="showSettings = true" class="inline-flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 hover:border-slate-500 px-2.5 py-1 rounded-lg text-xs transition shadow-sm whitespace-nowrap" title="Click to change notification recipient">
+                        <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                        <span class="text-slate-400 font-normal">To:</span>
+                        <span class="font-mono font-medium text-slate-200" x-text="adminEmail"></span>
+                        <span class="text-[10px] text-slate-400 font-normal ml-0.5">✎ edit</span>
+                    </button>
+                </div>
+                <p class="text-slate-400 text-xs">Create professional service invoices and dispatch directly to the owner.</p>
+            </div>
+            
+            <div class="flex items-center gap-3 shrink-0 self-start md:self-center">
+                <!-- Direct PDF Download -->
+                <button @click="generatePDF()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2.5 rounded-xl font-semibold transition shadow-lg shadow-red-600/25 flex items-center gap-2 text-sm whitespace-nowrap">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                    <span>Download PDF</span>
+                </button>
+
+                <!-- Send Directly to Shop Owner -->
+                <button @click="sendToOwner()" :disabled="isSending" class="bg-slate-800 hover:bg-red-600 border border-slate-700 hover:border-red-500 disabled:opacity-60 text-white px-4 py-2.5 rounded-xl font-semibold transition shadow-lg flex items-center gap-2 text-sm whitespace-nowrap">
+                    <svg x-show="!isSending" class="w-4 h-4 text-red-400 group-hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                    <svg x-show="isSending" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path></svg>
+                    <span x-text="isSending ? 'Sending to Owner...' : 'Send to Shop Owner'"></span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Notification Banner -->
+        <div x-show="notification.show" x-cloak class="p-4 border-b flex items-start justify-between gap-3 transition-all"
+             :class="notification.type === 'success' ? 'bg-emerald-50 text-emerald-900 border-emerald-200' : (notification.type === 'info' ? 'bg-amber-50 text-amber-900 border-amber-200' : 'bg-red-50 text-red-900 border-red-200')">
+            <div class="flex items-start gap-2.5">
+                <span class="text-xl" x-text="notification.type === 'success' ? '✅' : (notification.type === 'info' ? '🔔' : '⚠️')"></span>
+                <div>
+                    <p class="font-medium text-sm" x-text="notification.message"></p>
+                </div>
+            </div>
+            <button @click="notification.show = false" class="text-slate-400 hover:text-slate-600 text-sm font-bold">&times;</button>
+        </div>
+
+        <!-- Printable Invoice Container -->
+        <div id="invoice-content" class="p-8 md:p-12 bg-white space-y-8">
+            
+            <!-- Header Section matching business branding -->
+            <div class="flex flex-col md:flex-row justify-between items-start border-b border-slate-200 pb-8 gap-6">
+                <div>
+                    <h2 class="text-3xl font-black tracking-tight text-red-600 uppercase">MAS Tyres</h2>
+                    <p class="text-xs font-semibold tracking-wider text-slate-500 uppercase mt-1">Tyres | Tracking | Exhausts | Service</p>
+                    <div class="text-sm text-slate-600 mt-4 space-y-1">
+                        <p>Unit 2, 264 Manchester Road</p>
+                        <p>Huddersfield, HD4 5AA</p>
+                        <p class="pt-1"><strong>Tel:</strong> 01484 346 929</p>
+                        <p><strong>Email:</strong> info@mastyres.co.uk</p>
+                        <p><strong>Web:</strong> www.mastyres.co.uk</p>
+                    </div>
+                </div>
+                <div class="w-full md:w-auto bg-slate-50 p-6 rounded-xl border border-slate-200 space-y-3 min-w-[280px]">
+                    <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400">Job & Vehicle Details</h3>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Vehicle Reg:</label>
+                        <input type="text" x-model="vehicleReg" placeholder="e.g. AB65 XYZ" class="w-full bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-sm uppercase font-mono font-bold focus:ring-2 focus:ring-red-500 focus:outline-none">
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">Date:</label>
+                            <input type="date" x-model="invoiceDate" class="w-full bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-red-500 focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">Mileage:</label>
+                            <input type="text" x-model="mileage" placeholder="e.g. 45,200" class="w-full bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-red-500 focus:outline-none">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Customer Details Input -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-50/50 p-6 rounded-xl border border-slate-200">
+                <div>
+                    <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Customer Name</label>
+                    <input type="text" x-model="customerName" placeholder="Client Full Name" class="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-red-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Customer Email / Phone</label>
+                    <input type="text" x-model="customerContact" placeholder="client@email.com / 07123 456789" class="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-red-500 focus:outline-none">
+                </div>
+            </div>
+
+            <!-- Line Items Table -->
+            <div>
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="border-b-2 border-slate-200 text-xs font-bold text-slate-500 uppercase">
+                            <th class="py-3 px-4 w-24">Qty</th>
+                            <th class="py-3 px-4">Description / Service</th>
+                            <th class="py-3 px-4 w-32 text-right">Unit Price (£)</th>
+                            <th class="py-3 px-4 w-32 text-right">Total (£)</th>
+                            <th class="py-3 px-4 w-12 print-hidden"></th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100">
+                        <template x-for="(item, index) in items" :key="index">
+                            <tr class="group hover:bg-slate-50/80 transition">
+                                <td class="py-3 px-4">
+                                    <input type="text" x-model="item.qty" class="w-full bg-white border border-slate-300 rounded-lg px-2 py-1.5 text-sm text-center font-semibold focus:ring-2 focus:ring-red-500 focus:outline-none">
+                                </td>
+                                <td class="py-3 px-4">
+                                    <input type="text" x-model="item.description" placeholder="e.g. 225/45R17 Tyres & Wheel Alignment" class="w-full bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-red-500 focus:outline-none">
+                                </td>
+                                <td class="py-3 px-4 text-right">
+                                    <input type="number" step="0.01" x-model.number="item.price" class="w-full bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-sm text-right focus:ring-2 focus:ring-red-500 focus:outline-none">
+                                </td>
+                                <td class="py-3 px-4 text-right font-semibold text-slate-700">
+                                    £<span x-text="lineTotal(item).toFixed(2)"></span>
+                                </td>
+                                <td class="py-3 px-4 text-center print-hidden">
+                                    <button @click="removeItem(index)" class="text-slate-400 hover:text-red-600 transition" x-show="items.length > 1" title="Delete row">
+                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                    </button>
+                                </td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+
+                <!-- Add Row Button -->
+                <div class="mt-4 print-hidden">
+                    <button @click="addItem()" class="inline-flex items-center gap-2 text-sm font-semibold text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 px-4 py-2 rounded-xl transition">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                        Add Line Item
+                    </button>
+                </div>
+            </div>
+
+            <!-- Totals Section -->
+            <div class="flex justify-end pt-6 border-t border-slate-200">
+                <div class="w-full sm:w-80 space-y-2 text-sm">
+                    <div class="flex justify-between py-1 text-slate-600">
+                        <span>Subtotal:</span>
+                        <span class="font-semibold">£<span x-text="subtotal.toFixed(2)"></span></span>
+                    </div>
+                    <div class="flex justify-between py-1 text-slate-600">
+                        <span>VAT (20%):</span>
+                        <span class="font-semibold">£<span x-text="vat.toFixed(2)"></span></span>
+                    </div>
+                    <div class="flex justify-between py-3 border-t border-slate-200 text-lg font-bold text-slate-900">
+                        <span>Total Due:</span>
+                        <span class="text-red-600">£<span x-text="grandTotal.toFixed(2)"></span></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Footer Notes -->
+            <div class="border-t border-slate-200 pt-6 text-xs text-slate-500 space-y-1">
+                <p><strong>Payment Terms:</strong> Due upon completion. Thank you for choosing MAS Tyres.</p>
+                <p>All parts and services remain the property of MAS Tyres until paid in full.</p>
+            </div>
+
+        </div>
+
+        <!-- Notification & Email Delivery Settings Modal -->
+        <div id="settings-modal" x-show="showSettings" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm transition-all" @keydown.escape.window="showSettings = false">
+            <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-lg w-full overflow-hidden" @click.away="showSettings = false">
+                <div class="bg-slate-900 p-5 text-white flex justify-between items-center">
+                    <div>
+                        <h3 class="font-bold text-base">Email Delivery & Settings</h3>
+                        <p class="text-xs text-slate-400 mt-0.5">Manage notification recipient and connect Gmail for Red Theme + PDF attachments.</p>
+                    </div>
+                    <button @click="showSettings = false" class="text-slate-400 hover:text-white transition text-xl font-bold">&times;</button>
+                </div>
+                
+                <div class="p-6 space-y-5">
+                    <!-- Recipient Email -->
+                    <div>
+                        <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Notification Recipient Email</label>
+                        <input type="email" x-model="tempEmail" placeholder="owner@email.com" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-sm font-medium focus:ring-2 focus:ring-red-500 focus:outline-none">
+                        <p class="text-[11px] text-slate-500 mt-1">Where invoice notifications will be delivered.</p>
+                    </div>
+
+                    <!-- Gmail Connection for Red Theme & PDF Attachments -->
+                    <div class="pt-4 border-t border-slate-200">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-xs font-bold uppercase tracking-wider text-slate-500">Delivery Mode</span>
+                            <span class="text-[11px] font-bold px-2 py-0.5 rounded-full"
+                                  :class="smtpStatus.connected ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'"
+                                  x-text="smtpStatus.connected ? '✅ Red Theme & PDF Active' : '⚠️ Basic Relay (No PDF)'"></span>
+                        </div>
+
+                        <div class="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+                            <p class="text-xs text-slate-600 leading-relaxed">
+                                To receive the <strong>Red Table Design</strong> and <strong>real PDF file attachments</strong> in your primary inbox, enter your 16-character Google App Password below:
+                            </p>
+                            
+                            <div class="space-y-2">
+                                <div>
+                                    <label class="block text-[11px] font-semibold text-slate-600 mb-1">Your Gmail Address:</label>
+                                    <input type="email" x-model="smtpUser" placeholder="yourgmail@gmail.com" class="w-full bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-xs focus:ring-2 focus:ring-red-500 focus:outline-none font-mono">
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] font-semibold text-slate-600 mb-1">16-Character Google App Password:</label>
+                                    <input type="password" x-model="smtpPass" placeholder="e.g. abcd efgh ijkl mnop" class="w-full bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-xs focus:ring-2 focus:ring-red-500 focus:outline-none font-mono">
+                                </div>
+                            </div>
+
+                            <div class="flex items-center justify-between pt-1">
+                                <a href="https://myaccount.google.com/apppasswords" target="_blank" class="text-[11px] text-red-600 hover:text-red-700 font-semibold underline flex items-center gap-1">
+                                    <span>Get 16-char App Password</span> &rarr;
+                                </a>
+                                <button @click="connectGmail()" :disabled="isVerifyingSmtp" class="bg-red-600 hover:bg-red-700 disabled:bg-slate-400 text-white px-3.5 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 shadow-sm">
+                                    <svg x-show="isVerifyingSmtp" class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path></svg>
+                                    <span x-text="isVerifyingSmtp ? 'Verifying...' : (smtpStatus.connected ? 'Update Password' : 'Connect Gmail')"></span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="p-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
+                    <button @click="showSettings = false" class="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:text-slate-800">Close</button>
+                    <button @click="saveSettings()" class="bg-slate-900 hover:bg-slate-800 text-white px-5 py-2 rounded-xl text-xs font-semibold transition">Save Recipient</button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        function invoiceApp() {
+            return {
+                vehicleReg: 'AB65 XYZ',
+                invoiceDate: new Date().toISOString().split('T')[0],
+                mileage: '45,200',
+                customerName: '',
+                customerContact: '',
+                adminEmail: localStorage.getItem('mas_admin_email') || 'jazib7563@gmail.com',
+                tempEmail: localStorage.getItem('mas_admin_email') || 'jazib7563@gmail.com',
+                smtpUser: 'jazib7563@gmail.com',
+                smtpPass: '',
+                smtpStatus: { connected: false },
+                showSettings: false,
+                isSending: false,
+                isVerifyingSmtp: false,
+                notification: {
+                    show: false,
+                    type: 'success',
+                    message: ''
+                },
+                init() {
+                    this.checkSmtpStatus();
+                },
+                async checkSmtpStatus() {
+                    try {
+                        const res = await fetch('/api/smtp-status');
+                        const data = await res.json();
+                        this.smtpStatus.connected = !!data.connected;
+                        if (data.user) this.smtpUser = data.user;
+                        if (data.adminEmail) this.adminEmail = data.adminEmail;
+                        this.tempEmail = this.adminEmail;
+                    } catch (e) {
+                        console.warn('Could not fetch SMTP status:', e);
+                    }
+                },
+                async connectGmail() {
+                    if (!this.smtpUser || !this.smtpPass) {
+                        alert('Please enter both your Gmail address and 16-character App Password.');
+                        return;
+                    }
+
+                    this.isVerifyingSmtp = true;
+                    try {
+                        const res = await fetch('/api/save-smtp', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                smtp_user: this.smtpUser,
+                                smtp_pass: this.smtpPass,
+                                admin_email: this.adminEmail
+                            })
+                        });
+                        const result = await res.json();
+                        if (result.success) {
+                            this.smtpStatus.connected = true;
+                            this.smtpPass = '';
+                            this.showSettings = false;
+                            this.notification = {
+                                show: true,
+                                type: 'success',
+                                message: 'Gmail connected! Custom Red Table design and attached PDF files are now active.'
+                            };
+                        } else {
+                            alert(result.message || 'Connection failed.');
+                        }
+                    } catch (err) {
+                        alert('Network error connecting to server: ' + err.message);
+                    } finally {
+                        this.isVerifyingSmtp = false;
+                    }
+                },
+                    type: 'success',
+                    message: ''
+                },
+                items: [
+                    { qty: '1x', description: '225/45 R17 High Performance Tyre', price: 85.00 },
+                    { qty: '1x', description: 'Computerised Wheel Alignment (Tracking)', price: 40.00 }
+                ],
+                getQtyNumber(qty) {
+                    const parsed = parseFloat(qty);
+                    return isNaN(parsed) ? 1 : parsed;
+                },
+                lineTotal(item) {
+                    return this.getQtyNumber(item.qty) * (parseFloat(item.price) || 0);
+                },
+                get subtotal() {
+                    return this.items.reduce((acc, item) => acc + this.lineTotal(item), 0);
+                },
+                get vat() {
+                    return this.subtotal * 0.20;
+                },
+                get grandTotal() {
+                    return this.subtotal + this.vat;
+                },
+                addItem() {
+                    this.items.push({ qty: '1x', description: '', price: 0.00 });
+                },
+                removeItem(index) {
+                    this.items.splice(index, 1);
+                },
+                saveSettings() {
+                    if (this.tempEmail && this.tempEmail.includes('@')) {
+                        this.adminEmail = this.tempEmail.trim();
+                        localStorage.setItem('mas_admin_email', this.adminEmail);
+                        this.showSettings = false;
+                        this.notification = {
+                            show: true,
+                            type: 'success',
+                            message: `Notification email updated to: ${this.adminEmail}`
+                        };
+                    } else {
+                        alert('Please enter a valid email address.');
+                    }
+                },
+                async sendToOwner() {
+                    this.isSending = true;
+
+                    let pdfBase64 = null;
+                    const cleanReg = (this.vehicleReg || 'Draft').replace(/[^a-zA-Z0-9_-]/g, '_');
+                    const pdfFilename = `MAS-Tyres-Invoice-${cleanReg}.pdf`;
+
+                    try {
+                        const doc = this.buildPDFDocument();
+                        const dataUri = doc.output('datauristring');
+                        if (dataUri && dataUri.includes(',')) {
+                            pdfBase64 = dataUri.split(',')[1];
+                        }
+                    } catch (pdfErr) {
+                        console.warn('Could not generate PDF attachment:', pdfErr);
+                    }
+
+                    const payload = {
+                        vehicle_reg: this.vehicleReg,
+                        invoice_date: this.invoiceDate,
+                        mileage: this.mileage,
+                        customer_name: this.customerName || 'N/A',
+                        customer_contact: this.customerContact || 'N/A',
+                        admin_email: this.adminEmail,
+                        items: this.items,
+                        items_summary: this.items.map(i => `${i.qty || '1x'} | ${i.description || 'Service'} | Unit: £${(parseFloat(i.price)||0).toFixed(2)} | Total: £${this.lineTotal(i).toFixed(2)}`).join('\n'),
+                        subtotal: `£${this.subtotal.toFixed(2)}`,
+                        vat: `£${this.vat.toFixed(2)}`,
+                        grand_total: `£${this.grandTotal.toFixed(2)}`,
+                        pdf_base64: pdfBase64,
+                        pdf_filename: pdfFilename
+                    };
+
+                    try {
+                        const response = await fetch("send-mail.php", {
+                            method: "POST",
+                            headers: { 
+                                "Content-Type": "application/json; charset=utf-8" 
+                            },
+                            body: JSON.stringify(payload)
+                        });
+
+                        const result = await response.json();
+
+                        if (result.success) {
+                            this.notification = {
+                                show: true,
+                                type: result.needsActivation ? 'info' : 'success',
+                                message: result.message
+                            };
+                        } else {
+                            this.notification = {
+                                show: true,
+                                type: 'error',
+                                message: 'Failed to send invoice: ' + (result.message || 'Server error.')
+                            };
+                        }
+                    } catch (err) {
+                        this.notification = {
+                            show: true,
+                            type: 'error',
+                            message: 'Network error connecting to the server: ' + err.message
+                        };
+                    } finally {
+                        this.isSending = false;
+                    }
+                },
+                buildPDFDocument() {
+                    const jsPDFClass = (window.jspdf && window.jspdf.jsPDF) ? window.jspdf.jsPDF : window.jsPDF;
+                    if (!jsPDFClass) {
+                        throw new Error('PDF generator library not loaded.');
+                    }
+
+                    const doc = new jsPDFClass({
+                        orientation: 'portrait',
+                        unit: 'mm',
+                        format: 'a4'
+                    });
+
+                    // MAS Tyres Header Brand
+                    doc.setFont('helvetica', 'bold');
+                    doc.setFontSize(22);
+                    doc.setTextColor(220, 38, 38); // #dc2626
+                    doc.text('MAS TYRES', 14, 20);
+
+                    doc.setFontSize(8);
+                    doc.setFont('helvetica', 'bold');
+                    doc.setTextColor(100, 116, 139); // slate-500
+                    doc.text('TYRES | TRACKING | EXHAUSTS | SERVICE', 14, 25);
+
+                    doc.setFont('helvetica', 'normal');
+                    doc.setFontSize(9);
+                    doc.setTextColor(71, 85, 105);
+                    doc.text('Unit 2, 264 Manchester Road', 14, 32);
+                    doc.text('Huddersfield, HD4 5AA', 14, 37);
+                    doc.text('Tel: 01484 346 929', 14, 42);
+                    doc.text('Email: info@mastyres.co.uk', 14, 47);
+                    doc.text('Web: www.mastyres.co.uk', 14, 52);
+
+                    // Vehicle & Job Details Box
+                    doc.setFillColor(248, 250, 252);
+                    doc.setDrawColor(226, 232, 240);
+                    doc.roundedRect(120, 14, 76, 40, 3, 3, 'FD');
+
+                    doc.setFont('helvetica', 'bold');
+                    doc.setFontSize(8);
+                    doc.setTextColor(148, 163, 184);
+                    doc.text('JOB & VEHICLE DETAILS', 125, 21);
+
+                    doc.setFontSize(8);
+                    doc.setTextColor(71, 85, 105);
+                    doc.text('VEHICLE REG:', 125, 28);
+                    doc.setFont('courier', 'bold');
+                    doc.setFontSize(11);
+                    doc.setTextColor(15, 23, 42);
+                    doc.text((this.vehicleReg || 'N/A').toUpperCase(), 152, 28);
+
+                    doc.setFont('helvetica', 'normal');
+                    doc.setFontSize(8);
+                    doc.setTextColor(71, 85, 105);
+                    doc.text('DATE:', 125, 36);
+                    doc.setFont('helvetica', 'bold');
+                    doc.text(this.invoiceDate || new Date().toISOString().split('T')[0], 152, 36);
+
+                    doc.setFont('helvetica', 'normal');
+                    doc.text('MILEAGE:', 125, 44);
+                    doc.setFont('helvetica', 'bold');
+                    doc.text(this.mileage || 'N/A', 152, 44);
+
+                    // Customer Details Box
+                    doc.setFillColor(248, 250, 252);
+                    doc.setDrawColor(226, 232, 240);
+                    doc.roundedRect(14, 60, 182, 22, 3, 3, 'FD');
+
+                    doc.setFont('helvetica', 'bold');
+                    doc.setFontSize(8);
+                    doc.setTextColor(148, 163, 184);
+                    doc.text('CUSTOMER NAME:', 18, 68);
+                    doc.setFont('helvetica', 'bold');
+                    doc.setFontSize(10);
+                    doc.setTextColor(15, 23, 42);
+                    doc.text(this.customerName || 'N/A', 56, 68);
+
+                    doc.setFont('helvetica', 'bold');
+                    doc.setFontSize(8);
+                    doc.setTextColor(148, 163, 184);
+                    doc.text('CONTACT INFO:', 18, 76);
+                    doc.setFont('helvetica', 'normal');
+                    doc.setFontSize(9);
+                    doc.setTextColor(30, 41, 59);
+                    doc.text(this.customerContact || 'N/A', 56, 76);
+
+                    // Items Table
+                    const tableBody = this.items.map(item => [
+                        item.qty || '1x',
+                        item.description || 'Service',
+                        '£' + (parseFloat(item.price) || 0).toFixed(2),
+                        '£' + this.lineTotal(item).toFixed(2)
+                    ]);
+
+                    doc.autoTable({
+                        startY: 88,
+                        head: [['QTY', 'DESCRIPTION / SERVICE', 'UNIT PRICE (£)', 'TOTAL (£)']],
+                        body: tableBody,
+                        headStyles: {
+                            fillColor: [15, 23, 42], // slate-900
+                            textColor: [255, 255, 255],
+                            fontStyle: 'bold',
+                            fontSize: 8
+                        },
+                        columnStyles: {
+                            0: { cellWidth: 20, halign: 'center' },
+                            1: { cellWidth: 'auto' },
+                            2: { cellWidth: 32, halign: 'right' },
+                            3: { cellWidth: 32, halign: 'right', fontStyle: 'bold' }
+                        },
+                        styles: {
+                            fontSize: 9,
+                            cellPadding: 3.5,
+                            lineColor: [241, 245, 249],
+                            lineWidth: 0.1
+                        },
+                        alternateRowStyles: {
+                            fillColor: [248, 250, 252]
+                        }
+                    });
+
+                    // Totals Section
+                    const finalY = doc.lastAutoTable.finalY + 6;
+                    const rightColX = 135;
+
+                    doc.setFontSize(9);
+                    doc.setFont('helvetica', 'normal');
+                    doc.setTextColor(71, 85, 105);
+                    doc.text('Subtotal:', rightColX, finalY);
+                    doc.text('£' + this.subtotal.toFixed(2), 196, finalY, { align: 'right' });
+
+                    doc.text('VAT (20%):', rightColX, finalY + 6);
+                    doc.text('£' + this.vat.toFixed(2), 196, finalY + 6, { align: 'right' });
+
+                    // Total Due line
+                    doc.setDrawColor(226, 232, 240);
+                    doc.line(rightColX, finalY + 9, 196, finalY + 9);
+
+                    doc.setFont('helvetica', 'bold');
+                    doc.setFontSize(11);
+                    doc.setTextColor(220, 38, 38);
+                    doc.text('Total Due:', rightColX, finalY + 16);
+                    doc.text('£' + this.grandTotal.toFixed(2), 196, finalY + 16, { align: 'right' });
+
+                    // Footer Terms
+                    const pageHeight = doc.internal.pageSize.getHeight();
+                    const footerY = pageHeight - 16;
+                    doc.setDrawColor(226, 232, 240);
+                    doc.line(14, footerY - 4, 196, footerY - 4);
+
+                    doc.setFontSize(8);
+                    doc.setFont('helvetica', 'normal');
+                    doc.setTextColor(148, 163, 184);
+                    doc.text('Payment Terms: Due upon completion. Thank you for choosing MAS Tyres.', 14, footerY);
+                    doc.text('All parts and services remain the property of MAS Tyres until paid in full.', 14, footerY + 4);
+
+                    return doc;
+                },
+                generatePDF() {
+                    try {
+                        const doc = this.buildPDFDocument();
+                        const cleanReg = (this.vehicleReg || 'Draft').replace(/[^a-zA-Z0-9_-]/g, '_');
+                        doc.save(`MAS-Tyres-Invoice-${cleanReg}.pdf`);
+
+                        this.notification = {
+                            show: true,
+                            type: 'success',
+                            message: `PDF invoice "MAS-Tyres-Invoice-${cleanReg}.pdf" downloaded successfully!`
+                        };
+                    } catch (err) {
+                        console.error('PDF Generation Error:', err);
+                        this.notification = {
+                            show: true,
+                            type: 'error',
+                            message: 'PDF generation encountered an error: ' + err.message
+                        };
+                    }
+                }
+            }
+        }
+    </script>
+</body>
+</html>

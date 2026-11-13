@@ -1,0 +1,8 @@
+{
+  "version": 2,
+  "rewrites": [
+    { "source": "/send-mail.php", "destination": "/api/send-mail" },
+    { "source": "/api/send-mail", "destination": "/api/send-mail" },
+    { "source": "/api/smtp-status", "destination": "/api/smtp-status" }
+  ]
+}
